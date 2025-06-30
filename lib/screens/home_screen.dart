@@ -22,7 +22,115 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _updateService.addListener(_onDataUpdated);
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    // Inicializa notificações
+    await _updateService.initializeNotifications();
+    
+    // Se não tem permissão, mostra dialog para solicitar
+    if (!_updateService.notificationsEnabled) {
+      _showNotificationPermissionDialog();
+    }
+    
+    // Inicia o serviço de atualização
     _updateService.startAutoUpdate();
+  }
+
+  void _showNotificationPermissionDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.notifications_active,
+                  color: Colors.blue.shade600,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Ativar Notificações'),
+                ),
+              ],
+            ),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deseja receber notificações quando:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.update, size: 20, color: Colors.green),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('A planilha for atualizada')),
+                  ],
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.add_circle, size: 20, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Novos dados forem adicionados')),
+                  ],
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.error, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Ocorrerem erros de conexão')),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Agora Não'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  final granted = await _updateService.requestNotificationPermission();
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          granted 
+                              ? 'Notificações ativadas com sucesso! 🔔'
+                              : 'Notificações não foram ativadas',
+                        ),
+                        backgroundColor: granted ? Colors.green : Colors.orange,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Ativar'),
+              ),
+            ],
+          );
+        },
+      );
+    });
   }
 
   @override
@@ -38,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _applyFilters();
       });
       
-      // Mostra notificação quando dados são atualizados
+      // Mostra notificação quando dados são atualizados (apenas no app)
       if (_updateService.lastUpdate != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -132,6 +240,38 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // Botão de notificações
+          IconButton(
+            icon: Icon(
+              _updateService.notificationsEnabled 
+                  ? Icons.notifications_active 
+                  : Icons.notifications_off,
+            ),
+            onPressed: () async {
+              if (!_updateService.notificationsEnabled) {
+                final granted = await _updateService.requestNotificationPermission();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        granted 
+                            ? 'Notificações ativadas! 🔔'
+                            : 'Permissão negada',
+                      ),
+                      backgroundColor: granted ? Colors.green : Colors.red,
+                    ),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Notificações já estão ativas! 🔔'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -169,7 +309,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
-          // Filtros - Agora passando todos os itens para extrair dados reais
+          // Filtros
           FilterWidget(
             allItems: _updateService.items,
             onFiltersChanged: (filters) {
